@@ -17,6 +17,20 @@ if not exist "%source_folder%" (
     goto loop
 )
 
+REM Check if there are any .wav files in the selected directory
+set "has_wav_files=false"
+for %%f in ("%source_folder%\*.wav") do (
+    set "has_wav_files=true"
+    goto :check_done
+)
+
+:check_done
+if "%has_wav_files%"=="false" (
+    echo.
+    echo Error: No .wav files were found in the specified directory. Please try again.
+    goto loop
+)
+
 REM Ask the user if they want to copy files to the same directory or a new one
 echo Do you want to organise your files within the same directory (Y/N)?
 set /p "copy_to_same_dir="
@@ -96,14 +110,14 @@ if %free_space_kb% lss %required_space_kb% (
 )
 
 REM Set the size limit for each folder in bytes (8.97GB so ~under the threshold to get the next GB)
-set /a size_limit_kb=9405726
+set /a size_limit_kb= 9405726
 REM set limit for max number of files to move at once (255)
 set /a file_limit = 255
 
 REM Initialize variables
 set /a current_folder_size=0
 set /a folder_index=1
-set "current_folder=Part !folder_index!"
+set "current_folder=Part!folder_index!"
 set /a file_count_in_batch=0
 
 REM Create the first folder in the destination directory
@@ -112,18 +126,16 @@ mkdir "!dest_folder!\!current_folder!"
 REM Temporary file to store the list of files to be moved
 set "file_list="
 
-echo Beginning to move files...
+echo Moving files into !current_folder!...
 REM First pass: Calculate cumulative sizes and set breakpoints
 for %%f in ("!source_folder!\*.wav") do (
     REM Get the size of the current file in KB
     set /a file_size_bytes=%%~zf
     set /a file_size_kb=file_size_bytes/1024
-    
     REM Check if adding the file would exceed the folder size limit
     set /a new_folder_size_kb=current_folder_size+file_size_kb
     if !new_folder_size_kb! geq !size_limit_kb! (
-		echo Moving !file_count_in_batch! files into "!current_folder!"
-
+		REM if the new file would make it bigger than file limit, move all the current files before starting a new file list for the new directory
         REM Move the accumulated files in bulk
         robocopy "!source_folder!" "!dest_folder!\!current_folder!" !file_list! /mov /njh /njs /ndl /nc /ns /nfl
         
@@ -132,7 +144,8 @@ for %%f in ("!source_folder!\*.wav") do (
 		set /a file_count_in_batch=0
         set /a current_folder_size=0
         set /a folder_index+=1
-        set "current_folder=Part !folder_index!"
+        set "current_folder=Part!folder_index!"
+		echo Moving files into !current_folder!...
         mkdir "!dest_folder!\!current_folder!"
     )
 
@@ -144,8 +157,6 @@ for %%f in ("!source_folder!\*.wav") do (
 	set /a file_count_in_batch+=1
 	
 	if !file_count_in_batch! geq !file_limit! (
-		echo Moving !file_count_in_batch! files into "!current_folder!"
-
         REM Move the accumulated files in bulk
         robocopy "!source_folder!" "!dest_folder!\!current_folder!" !file_list! /mov /njh /njs /ndl /nc /ns /nfl
         
@@ -157,7 +168,6 @@ for %%f in ("!source_folder!\*.wav") do (
 
 REM After the loop, move any remaining files
 if defined file_list (
-	echo Moving !file_count_in_batch! files into "!current_folder!"
     robocopy "!source_folder!" "!dest_folder!\!current_folder!" !file_list! /mov /njh /njs /ndl /nc /ns /nfl
 )
 
